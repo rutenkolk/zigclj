@@ -52,6 +52,7 @@
              (rfs/chmod "777" ;(apply str (take-last 3 (format "%05o" (.getMode entry))))
                         (.getPath output-file)))
          )))))
+
 (defn unzip-in-memory
   ([input-stream]
    (unzip-in-memory input-stream "./"))
@@ -64,8 +65,7 @@
        (doseq [^ZipEntry entry (zip-entries zip-stream) :when (not (.isDirectory entry))
                :let [output-file (rfs/file target-dir (.getName entry))]]
          (rfs/mkdirs (rfs/parent output-file))
-         (io/copy zip-stream output-file)
-         )))))
+         (io/copy zip-stream output-file))))))
 
 (defn download-as-input-stream [url]
   (-> (client/get url {:as :byte-array})
@@ -83,7 +83,7 @@
            "aarch64" ::aarch64
            "riscv" ::riscv)})
 
-(defn truthy? [x] (if x true false))
+(defn- truthy? [x] (if x true false))
 
 (def zig-platform-specifier (str (name (:arch current-platform)) "-" (name (:os current-platform))))
 (def zig-archive-extension (if (= ::windows (:os current-platform)) ".zip" ".tar.xz"))
@@ -154,7 +154,13 @@
     (seqable? x) (s/join " " (map smart-str x))
     :default (str x)))
 
-(defn zig [& args]
+(defn zig
+  "call the zig compiler with command line arguments given via `args`. the arguments can be anything that can reasonably converted to a string (e.g. keywords).
+  If both the exit code is 0 and there is no output on stderr, only the trimmed stdout is returned as a string.
+  If either the exit code isn't 0 or the output to stderr isn't empty, a map is returned with the :exit code, as well as the strings corresponding to :out and :err.
+
+  This function expects `zig-command` to return a non-nil value."
+  [& args]
   (let [sh-args (apply vector (zig-command) (map smart-str args))
         cmd (s/join " " sh-args)
         {exit :exit out :out err :err :as ret} (apply sh sh-args)]
@@ -179,7 +185,8 @@
          (if (= tn1 tn2 tn3)
            (str "pub const " tn1 " = " body ";\n")
            full)))))
-(defn- add-function-info-members [source]
+
+(defn- add-function-parameter-info-members [source]
   (->
    (s/replace
     source
@@ -193,7 +200,9 @@
                              (map #(str \" % \"))
                              (s/join ", " ))]
         (str "\n" "pub const __zigclj_fn_param_names_" fn-name " = [_][]const u8{" param-names "};\n" full "\n" ))))
-   (str "\npub const __zigclj_fn_param_names_CLITERAL = [_][]const u8{\"type\"}; // note: this exists solely to not generate compile errors in zig when reflecting over functions\n")))
+   (str
+    "\npub const __zigclj_fn_param_names_CLITERAL = [_][]const u8{\"type\"}; "
+    "// note: this exists solely to not generate compile errors in zig when reflecting over functions\n")))
 
 (defn translate-c-header!
   "translate a c header file via 'zig translate-c' to a zig source file. on success, returns the new zig source file as a string.
@@ -241,13 +250,9 @@
      \"RL_REALLOC\" \"\\n\"
      \"RL_FREE\"    \"\\n\"}})
   ```
-
-  there is one built-in post-processing option called :remove-struct-duplication which removes the duplicate 'struct_' type 'translate-c' creates for every struct in a header (true by default)
-
   "
-  [header & {:keys [remove-underscore remove-benign-errors remove-struct-duplication compile-error-replacements]
+  [header & {:keys [remove-underscore remove-benign-errors compile-error-replacements]
              :or {remove-underscore true
-                  remove-struct-duplication true
                   remove-benign-errors true
                   compile-error-replacements {}}
              :as opts}]
@@ -271,50 +276,14 @@
         compile-errors-list (->> compile-errors-match
                                  (map rest)
                                  (map (fn [[name msg line column]] [name {:name name :msg msg :line line :column column}])))
-        compile-errors (into (hash-map) compile-errors-list)
-        translate-c-post-processed
-          (if remove-struct-duplication (remove-duplicate-types translate-c-processed) translate-c-processed)]
+        compile-errors (into (hash-map) compile-errors-list)]
     (if (empty? compile-errors)
-      translate-c-post-processed
+      translate-c-processed
       compile-errors)))
 
-(comment
-
-  (let [zig-header (translate-c-header! "raylib.h"
-                    {:compile-error-replacements
-                     {"RL_MALLOC"  "\n"
-                      "RL_CALLOC"  "\n"
-                      "RL_REALLOC" "\n"
-                      "RL_FREE"    "\n"}})
-        header-with-param-info (add-function-info-members zig-header)]
-    (spit "raylib.zig" header-with-param-info)
-    ;(println header-with-param-info)
-    nil
-    )
-
-  (clojure.edn/read-string (slurp "raylib.edn") )
-  (slurp "raylib.edn")
-
-  (let [zig-header (translate-c-header! "raylib.h"
-                                        {:compile-error-replacements
-                                         {"RL_MALLOC"  "\n"
-                                          "RL_CALLOC"  "\n"
-                                          "RL_REALLOC" "\n"
-                                          "RL_FREE"    "\n"}})
-        header-with-param-info (add-function-info-members zig-header)
-        (spit "raylib.zig" header-with-param-info)
-        ]
-                                        ;(println header-with-param-info)
-    nil
-    )
-  (def zig_output (zig :build :run))
-
-  (println (:err zig_output))
-
-  (clojure.edn/read-string (:err zig_output))
-
-  (println (.repeat "-" 80))
-
-    "clear"
-
-  )
+(defn post-process-header-translation
+  "Removes the duplicate 'struct_' type 'translate-c' creates for every struct in a header and adds explicit information about function parameters."
+  [zig-src]
+  (-> zig-src
+   (remove-duplicate-types)
+   (add-function-parameter-info-members)))
