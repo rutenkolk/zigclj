@@ -1,0 +1,21 @@
+{:paths ["target/classes"]
+ :deps {}
+
+ :aliases
+ {:build {:replace-deps {org.clojure/clojure {:mvn/version "1.11.1"}
+                         io.github.clojure/tools.build {:git/tag "v0.3.0" :git/sha "e418fc9"}
+                         clj-http/clj-http {:mvn/version "3.13.0"}
+                         cheshire/cheshire {:mvn/version "5.13.0"}}
+          :ns-default build
+          :exec-fn run-tasks}
+  :install {:replace-deps {slipset/deps-deploy {:mvn/version "0.1.5"}}
+            :exec-fn deps-deploy.deps-deploy/deploy
+            :exec-args {:installer :local
+                        :artifact "native-target/zigclj-native.jar"
+                        :pom-file "native-target/pom.xml"}}
+  :deploy {:replace-deps {slipset/deps-deploy {:mvn/version "0.1.5"}}
+           :exec-fn deps-deploy.deps-deploy/deploy
+           :exec-args {:installer :remote
+                       :artifact "native-target/zigclj-native.jar"
+                       :pom-file "native-target/pom.xml"
+                       :sign-releases? true}}}}
