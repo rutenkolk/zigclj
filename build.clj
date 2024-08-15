@@ -11,7 +11,6 @@
 (def lib-coord 'wiredaemon/zigclj)
 (def native-lib-prefix "zigclj-native")
 (def version (format "0.13.%s" (b/git-count-revs nil)))
-;(def version "0.13.0")
 (def native-version "0.13.0")
 
 
@@ -41,7 +40,7 @@
   (keyword "wiredaemon" (str native-lib-prefix "-" (name (:os opts)) "-" (name (:arch opts)))))
 
 (defn- native-jar-file [opts]
-  (str native-target-dir native-lib-prefix "-" (name (:os opts)) "-" (name (:arch opts)) ".jar"))
+  (str native-target-dir "zigclj-native.jar"))
 
 (defn- zig-archive-extension [opts]
   (if (= "windows" (s/lower-case (name (:os opts)))) ".zip" ".tar.xz"))
@@ -141,7 +140,7 @@
 
 
 (defn- native-jar
-  "Generates a `zigclj-native-X.jar` file in the `native-target/` directory"
+  "Generates a `zigclj-native.jar` file in the `native-target/` directory"
   [opts]
   (if (not (and (:arch opts) (:os opts)))
     (binding [*out* *err*]

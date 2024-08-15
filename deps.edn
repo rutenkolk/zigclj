@@ -47,4 +47,15 @@
   :deploy {:replace-deps {slipset/deps-deploy {:mvn/version "0.1.5"}}
            :exec-fn deps-deploy.deps-deploy/deploy
            :exec-args {:installer :remote :artifact "target/zigclj.jar"
-                       :pom-file "target/pom.xml" :sign-releases? true}}}}
+                       :pom-file "target/pom.xml" :sign-releases? true}}
+  :install-native {:replace-deps {slipset/deps-deploy {:mvn/version "0.1.5"}}
+                   :exec-fn deps-deploy.deps-deploy/deploy
+                   :exec-args {:installer :local
+                               :artifact "native-target/zigclj-native.jar"
+                               :pom-file "native-target/pom.xml"}}
+  :deploy-native {:replace-deps {slipset/deps-deploy {:mvn/version "0.1.5"}}
+                  :exec-fn deps-deploy.deps-deploy/deploy
+                  :exec-args {:installer :remote
+                              :artifact "native-target/zigclj-native.jar"
+                              :pom-file "native-target/pom.xml"
+                              :sign-releases? true}}}}
