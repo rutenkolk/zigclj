@@ -76,7 +76,7 @@
   {:os (condp #(s/includes? %2 %1) (s/lower-case (System/getProperty "os.name"))
          "linux" ::linux
          "windows" ::windows
-         :default ::macos)
+         ::macos)
    :arch (case (System/getProperty "os.arch")
            ("x86_64" "amd64") ::x86_64
            "x86" ::x86
