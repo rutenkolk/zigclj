@@ -122,7 +122,7 @@
 
 (defn- get-local-install-path "returns the local zig compiler path, or nil, if there is no local `zig-compiler` folder" []
   (if (.exists ^java.io.File (io/file "zig-compiler"))
-    (if (= ::windows (:os current-platform)) "./zig-compiler/zig.exe" "./zig-compiler/zig")
+    (.getAbsolutePath (io/file (if (= ::windows (:os current-platform)) "./zig-compiler/zig.exe" "./zig-compiler/zig")))
     nil))
 
 (defn prepare-zig!
