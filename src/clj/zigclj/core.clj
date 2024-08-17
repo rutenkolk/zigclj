@@ -45,13 +45,8 @@
                :let [output-file (rfs/file target-dir (.getName entry))]]
          (rfs/mkdirs (rfs/parent output-file))
          (io/copy tar-stream output-file)
-         ;;NOTE: idk if this actually necessary under linux / macos, let's test first
-         #_(when (.isFile entry)
-             (println "mode is:" (apply str (take-last
-                                             3 (format "%05o" (.getMode entry)))))
-             (rfs/chmod "777" ;(apply str (take-last 3 (format "%05o" (.getMode entry))))
-                        (.getPath output-file)))
-         )))))
+         (when (.isFile entry)
+             (rfs/chmod "+rwx" (.getPath output-file))))))))
 
 (defn unzip-in-memory
   ([input-stream]
