@@ -149,6 +149,10 @@
     (seqable? x) (s/join " " (map smart-str x))
     :default (str x)))
 
+(defn- remove-parens [str]
+  (let [vals (iterate #(s/replace % #"\([^\(\)]*?\)" "") str)]
+    (reduce #(if (= %1 %2) (reduced %1) %2) vals)))
+
 (defn zig
   "call the zig compiler with command line arguments given via `args`. the arguments can be anything that can reasonably converted to a string (e.g. keywords).
   If both the exit code is 0 and there is no output on stderr, only the trimmed stdout is returned as a string.
@@ -185,11 +189,14 @@
   (->
    (s/replace
     source
-    #"pub extern fn ([^\)]+?)\(([^\)]*?)\)[^;]*;"
+    #"pub extern fn ([^\)]+?)\((.*?)\)\s[^;()]+;"
     (fn [[full fn-name params-match]]
       (let [param-names (->> params-match
-                             (re-seq #"\s?([^:,]+?):")
+                             (remove-parens)
+                             (re-seq #"\s?([^,]+)")
                              (map second)
+                             (map #(first (re-seq #"\s?([^:,]+?):|," %)))
+                             (map #(if (nil? %) "_" (second %)))
                              (map #(s/replace % #"\"" ""))
                              (map #(s/replace % #"@" ""))
                              (map #(str \" % \"))
