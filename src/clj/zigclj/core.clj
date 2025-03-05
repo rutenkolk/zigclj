@@ -206,6 +206,18 @@
     "\npub const __zigclj_fn_param_names_CLITERAL = [_][]const u8{\"type\"}; "
     "// note: this exists solely to not generate compile errors in zig when reflecting over functions\n")))
 
+(defn- rewrite-extern-references [source]
+  (-> source
+      (s/replace
+       #"(?m)pub const ([^:=]*): ([^=]*) = @extern\([^;]*?;"
+       (fn [[_ sym-name typ]]
+         (str "pub const __zigclj_extern_const_" sym-name " = " typ ";")))
+      (s/replace
+       #"(?m)pub extern var ([^:=;]*): ([^;]*?);"
+       (fn [[_ sym-name typ]]
+         (str "pub const __zigclj_extern_var_" sym-name " = " typ ";")))))
+
+
 (defn translate-c-header!
   "translate a c header file via 'zig translate-c' to a zig source file. on success, returns the new zig source file as a string.
 
@@ -288,4 +300,6 @@
   [zig-src]
   (-> zig-src
    (remove-duplicate-types)
-   (add-function-parameter-info-members)))
+   (add-function-parameter-info-members)
+   (rewrite-extern-references)))
+
