@@ -211,11 +211,11 @@
       (s/replace
        #"(?m)pub const ([^:=]*): ([^=]*) = @extern\([^;]*?;"
        (fn [[_ sym-name typ]]
-         (str "pub const __zigclj_extern_const_" sym-name " = " typ ";")))
+         (str "pub const zigclj_extern_const_" sym-name " = " typ ";")))
       (s/replace
        #"(?m)pub extern var ([^:=;]*): ([^;]*?);"
        (fn [[_ sym-name typ]]
-         (str "pub const __zigclj_extern_var_" sym-name " = " typ ";")))))
+         (str "pub const zigclj_extern_var_" sym-name " = " typ ";")))))
 
 
 (defn translate-c-header!
@@ -302,4 +302,49 @@
    (remove-duplicate-types)
    (add-function-parameter-info-members)
    (rewrite-extern-references)))
+
+(defn- header-translation-definitions [zig-source]
+  (->>
+   zig-source
+   (re-seq #"(?m)pub (.*?) (.*?) = ([\s\S]*?);(?=\R*[pub]|\Z)")
+   (map (fn [[full-match const? name definition]]
+          {:type :definition
+           :full-match full-match
+           :const? (= "const" const?)
+           :name name
+           :definition definition}))))
+
+(defn- translated-header-inline-functions [zig-source]
+  (->>
+   zig-source
+   (re-seq #"(?m)pub inline fn (.*?)(?=\()(.*?) \{\R([\s\S]*?)\R\}(?=\R*[pub]|\Z)")
+   (map (fn [[full-match name signature body]]
+          {:type :function
+           :full-match full-match
+           :fn-type :inline
+           :name name
+           :signature signature
+           :body body}))))
+
+(defn- translated-header-extern-functions [zig-source]
+  (->>
+   zig-source
+   (re-seq #"(?m)pub extern fn (.*?)(?=\()(.*?);(?=\R*[pub]|\Z)")
+   (map (fn [[full-match name signature]]
+          {:type :function
+           :full-match full-match
+           :fn-type :extern
+           :name name
+           :signature signature}))))
+
+(defn- translated-header-functions [zig-source]
+  (concat
+   (header-translation-extern-functions zig-source)
+   (header-translation-inline-functions zig-source)))
+
+(defn translated-header-declarations [zig-source]
+  (let [zig-source-no-comments (s/replace zig-source #"//.*" "\n")]
+    (concat
+     (header-translation-definitions zig-source-no-comments)
+     (header-translation-functions zig-source-no-comments))))
 
