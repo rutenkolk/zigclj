@@ -303,7 +303,7 @@
    (add-function-parameter-info-members)
    (rewrite-extern-references)))
 
-(defn- header-translation-definitions [zig-source]
+(defn- translated-header-definitions [zig-source]
   (->>
    zig-source
    (re-seq #"(?m)pub (.*?) (.*?) = ([\s\S]*?);(?=\R*[pub]|\Z)")
@@ -339,12 +339,12 @@
 
 (defn- translated-header-functions [zig-source]
   (concat
-   (header-translation-extern-functions zig-source)
-   (header-translation-inline-functions zig-source)))
+   (translated-header-extern-functions zig-source)
+   (translated-header-inline-functions zig-source)))
 
 (defn translated-header-declarations [zig-source]
   (let [zig-source-no-comments (s/replace zig-source #"//.*" "\n")]
     (concat
-     (header-translation-definitions zig-source-no-comments)
-     (header-translation-functions zig-source-no-comments))))
+     (translated-header-definitions zig-source-no-comments)
+     (translated-header-functions zig-source-no-comments))))
 
