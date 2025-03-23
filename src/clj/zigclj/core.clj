@@ -217,24 +217,78 @@
        (fn [[_ sym-name typ]]
          (str "pub const zigclj_extern_var_" sym-name " = " typ ";")))))
 
+(defn post-process-header-translation
+  "Removes the duplicate 'struct_' type 'translate-c' creates for every struct in a header and adds explicit information about function parameters."
+  [zig-src]
+  (-> zig-src
+   (remove-duplicate-types)
+   (add-function-parameter-info-members)
+   (rewrite-extern-references)))
+
+(defn- translated-header-definitions [zig-source]
+  (->>
+   zig-source
+   (re-seq #"(?m)pub (.*?) (.*?) = ([\s\S]*?);(?=\R*[pub]|\Z)")
+   (map (fn [[full-match const? name definition]]
+          {:type :definition
+           :full-match full-match
+           :const? (= "const" const?)
+           :name name
+           :definition definition}))))
+
+(defn- translated-header-inline-functions [zig-source]
+  (->>
+   zig-source
+   (re-seq #"(?m)pub inline fn (.*?)(?=\()(.*?) \{\R([\s\S]*?)\R\}(?=\R*[pub]|\Z)")
+   (map (fn [[full-match name signature body]]
+          {:type :function
+           :full-match full-match
+           :fn-type :inline
+           :name name
+           :signature signature
+           :body body}))))
+
+(defn- translated-header-extern-functions [zig-source]
+  (->>
+   zig-source
+   (re-seq #"(?m)pub extern fn (.*?)(?=\()(.*?);(?=\R*[pub]|\Z)")
+   (map (fn [[full-match name signature]]
+          {:type :function
+           :full-match full-match
+           :fn-type :extern
+           :name name
+           :signature signature}))))
+
+(defn- translated-header-functions [zig-source]
+  (concat
+   (translated-header-extern-functions zig-source)
+   (translated-header-inline-functions zig-source)))
+
+(defn translated-header-declarations [zig-source]
+  (let [zig-source-no-comments (s/replace zig-source #"//.*" "\n")]
+    (concat
+     (translated-header-definitions zig-source-no-comments)
+     (translated-header-functions zig-source-no-comments))))
 
 (defn translate-c-header!
-  "translate a c header file via 'zig translate-c' to a zig source file. on success, returns the new zig source file as a string.
+  "translate a c header file via 'zig translate-c' to a zig source file. returns a map containing the new `:zig-source` as a string.
 
-  'translate-c' may fail to translate certain macros or expressions from c, in which case the compile-errors are returned as a map. Pass in a mapping that yields custom replacements for those errors via the optional 'opt' map argument under the key :compile-error-replacements. This can be a function, but for convenience, a map of string replacements is often enough.
+  'translate-c' may fail to translate certain macros or expressions from c, in which case the `:compile-errors` are included as a map in the result.
 
-  the custom replacements must map from the declaration name to a suitable replacement. the replacement itself can be either a string or something that can be converted to a string to replace the lines that correspond to the translation-error, or for more control, another function.
+  A mapping yielding custom replacements for those errors can be supplied via the optional `opt` map argument under the key `:compile-error-replacements`. This can be a function, but for convenience, a map of string replacements is often enough.
+
+  The custom replacements must map from the declaration name to a suitable replacement. the replacement itself can be either a string or something that can be converted to a string to replace the lines that correspond to the translation-error, or for more control, another function.
 
   In the case of a function, the replacement function for that translation failure is called with a map that contains
-  the :full text to replace,
-  the :name of the declaration that failed to translate,
-  the :description the zig compiler generated for the @compileError builtin
+  the `:full` text to replace,
+  the `:name` of the declaration that failed to translate,
+  the `:description` the zig compiler generated for the @compileError builtin
 
   further options for the map are
-  :remove-underscore : if truthy, will disregard any and all declarations that start with an underscore as those are often internal c-compiler macros, or semi-private symbols that don't matter for using the header file. (true by default)
-  :remove-benign-errors : if truthy, will disregard all `common-benign-untranslatables` that are known (true by default)
+  `:remove-underscore` : if truthy, will disregard any and all declarations that start with an underscore as those are often internal c-compiler macros, or semi-private symbols that don't matter for using the header file. (true by default)
+  `:remove-benign-errors` : if truthy, will disregard all `common-benign-untranslatables` that are known (true by default)
 
-  the replacements of the :compile-error-replacements take priority over other replacement options like :remove-benign-errors
+  the replacements of the `:compile-error-replacements` take priority over other replacement options like `:remove-benign-errors`
 
   example usage:
 
@@ -290,61 +344,10 @@
         compile-errors-list (->> compile-errors-match
                                  (map rest)
                                  (map (fn [[name msg line column]] [name {:name name :msg msg :line line :column column}])))
-        compile-errors (into (hash-map) compile-errors-list)]
-    (if (empty? compile-errors)
-      translate-c-processed
-      compile-errors)))
+        compile-errors (into (hash-map) compile-errors-list)
+        final-zig-source (post-process-header-translation translate-c-processed)]
+    {:compile-errors compile-errors
+     :zig-source final-zig-source
+     :declarations (translated-header-declarations final-zig-source)}))
 
-(defn post-process-header-translation
-  "Removes the duplicate 'struct_' type 'translate-c' creates for every struct in a header and adds explicit information about function parameters."
-  [zig-src]
-  (-> zig-src
-   (remove-duplicate-types)
-   (add-function-parameter-info-members)
-   (rewrite-extern-references)))
-
-(defn- translated-header-definitions [zig-source]
-  (->>
-   zig-source
-   (re-seq #"(?m)pub (.*?) (.*?) = ([\s\S]*?);(?=\R*[pub]|\Z)")
-   (map (fn [[full-match const? name definition]]
-          {:type :definition
-           :full-match full-match
-           :const? (= "const" const?)
-           :name name
-           :definition definition}))))
-
-(defn- translated-header-inline-functions [zig-source]
-  (->>
-   zig-source
-   (re-seq #"(?m)pub inline fn (.*?)(?=\()(.*?) \{\R([\s\S]*?)\R\}(?=\R*[pub]|\Z)")
-   (map (fn [[full-match name signature body]]
-          {:type :function
-           :full-match full-match
-           :fn-type :inline
-           :name name
-           :signature signature
-           :body body}))))
-
-(defn- translated-header-extern-functions [zig-source]
-  (->>
-   zig-source
-   (re-seq #"(?m)pub extern fn (.*?)(?=\()(.*?);(?=\R*[pub]|\Z)")
-   (map (fn [[full-match name signature]]
-          {:type :function
-           :full-match full-match
-           :fn-type :extern
-           :name name
-           :signature signature}))))
-
-(defn- translated-header-functions [zig-source]
-  (concat
-   (translated-header-extern-functions zig-source)
-   (translated-header-inline-functions zig-source)))
-
-(defn translated-header-declarations [zig-source]
-  (let [zig-source-no-comments (s/replace zig-source #"//.*" "\n")]
-    (concat
-     (translated-header-definitions zig-source-no-comments)
-     (translated-header-functions zig-source-no-comments))))
 
