@@ -211,11 +211,11 @@
       (s/replace
        #"(?m)pub const ([^:=]*): ([^=]*) = @extern\([^;]*?;"
        (fn [[_ sym-name typ]]
-         (str "pub const zigclj_extern_const_" sym-name " = " typ ";")))
+         (str "pub const zigclj__extern_const__" sym-name " = " typ ";")))
       (s/replace
        #"(?m)pub extern var ([^:=;]*): ([^;]*?);"
        (fn [[_ sym-name typ]]
-         (str "pub const zigclj_extern_var_" sym-name " = " typ ";")))))
+         (str "pub const zigclj__extern_var__" sym-name " = " typ ";")))))
 
 (defn post-process-header-translation
   "Removes the duplicate 'struct_' type 'translate-c' creates for every struct in a header and adds explicit information about function parameters."
