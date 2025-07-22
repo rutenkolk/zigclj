@@ -1,0 +1,7 @@
+# zigclj
+
+zigclj is a clojure library that brings the zig compiler to clojure.
+It has an API through which the zig compiler can be extracted and executed.
+There are native packaged library versions available that contain the zig compiler, which when found on the classpath can be extracted at runtime and called.
+
+More detailed description, documentation and more coming soon.
