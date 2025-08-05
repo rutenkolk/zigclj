@@ -1,7 +1,87 @@
-# zigclj
+= Zig clj
+:experimental:
+:icons: font
+:icon-set: octicon
+:source-highlighter: rouge
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
 
-zigclj is a clojure library that brings the zig compiler to clojure.
-It has an API through which the zig compiler can be extracted and executed.
-There are native packaged library versions available that contain the zig compiler, which when found on the classpath can be extracted at runtime and called.
+== Overview
+Zigclj is a clojure library that brings the zig compiler to clojure.
+This library provides functions to obtain and execute the zig compiler.
+There are native packaged library versions available that contain the zig compiler, which when
+found on the classpath can be extracted at runtime and called.
+It also adds functionality on top of zigs `translate-c` functionality for header translation.
 
-More detailed description, documentation and more coming soon.
+=== Example usage
+
+
+[source,clojure]
+----
+(defn build-dir! [dir]
+  (z/prepare-zig!)
+  (let [build-output (clojure.java.shell/with-sh-dir (str dir) (z/zig :build :run))]
+    (assoc build-output :success (= 0 (:exit build-output))))
+----
+
+[source,clojure]
+----
+(z/prepare-zig!)
+(let [header "path/to/somelibrary.h"
+      build-dir "path/to/build-dir"
+      translated-file (file (str build-dir "somelibrary.zig"))
+      translate-results (z/translate-c-header!
+                           header
+                           {:compile-error-replacements {"UNTRANSLATABLE_MACRO" "\n"}})
+      zig-source (:zig-source translate-results)
+      _ (if (string? zig-source) (spit translated-file zig-source))]
+  (assoc
+   translate-results
+   :dir build-dir
+   :translated-file translated-file))
+----
+
+For more details on usage, check the documentation.
+
+== Building native libraries
+
+Building native jar dependencies generates a `native-target/zigclj-native.jar` file. this can be done via:
+
+[source,shell]
+----
+clj -T:build native-jar :os :SOME-OS :arch :SOME-ARCHITECTURE
+----
+
+two common variations are:
+
+[source,shell]
+----
+clj -T:build native-jar :os :windows :arch :x86_64
+----
+
+[source,shell]
+----
+clj -T:build native-jar :os :macos :arch :aarch64
+----
+
+== Installing native libraries
+
+install a newly built native dependency via
+
+[source,shell]
+----
+clj -T:install-native
+----
+
+[WARNING]
+=====
+Each native dependency has to be built and immediately installed.
+Each relies on using the same `native-target/zigclj-native.jar` file name, regardless of the target.
+Trying to build all native dependencies first before deploying one, will overwrite the previously built native
+dependency.
+=====
