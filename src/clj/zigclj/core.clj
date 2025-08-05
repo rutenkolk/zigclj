@@ -33,6 +33,7 @@
 (set! *warn-on-reflection* true)
 
 (defn unxz-untar-in-memory
+  "takes a `java.io.InputStream` and treats it as a XZ compressed Tar archive, extracting it to a directory. if no directory is specified, it will extract to the current directory."
   ([input-stream]
    (unxz-untar-in-memory input-stream "./"))
   ([input-stream target-dir]
@@ -46,9 +47,10 @@
          (rfs/mkdirs (rfs/parent output-file))
          (io/copy tar-stream output-file)
          (when (.isFile entry)
-             (rfs/chmod "+rwx" (.getPath output-file))))))))
+           (rfs/chmod "+rwx" (.getPath output-file))))))))
 
 (defn unzip-in-memory
+  "takes a `java.io.InputStream` and treats it as a Zip archive, extracting it to a directory. if no directory is specified, it will extract to the current directory."
   ([input-stream]
    (unzip-in-memory input-stream "./"))
   ([input-stream target-dir]
@@ -62,7 +64,7 @@
          (rfs/mkdirs (rfs/parent output-file))
          (io/copy zip-stream output-file))))))
 
-(defn download-as-input-stream [url]
+(defn- download-as-input-stream [url]
   (-> (client/get url {:as :byte-array})
       (:body)
       (io/input-stream)))
@@ -87,8 +89,14 @@
 (def extract! (case (:os current-platform) ::windows unzip-in-memory unxz-untar-in-memory))
 (defn zig-is-on-path? [] (truthy? (try (:out (sh "zig" "version")) (catch Exception ex nil))))
 
+(def default-zig-version "0.13.0")
+
 (defn download-zig!
-  ([] (download-zig! "master"))
+  "downloads the zig compiler for the `current-platform` from the official ziglang.org website.
+   the version to be downloaded can be specified via the version specifier used on
+   https://ziglang.org/download/index.json, such as 'master' but the default version is the
+   `default-zig-version`, which is the latest zig version this library has been tested against."
+  ([] (download-zig! default-zig-version))
   ([version-specifier]
     (letfn [(drop-file-extension [^String filename]
               (subs filename 0 (.lastIndexOf filename ".")))]
@@ -104,9 +112,9 @@
          (extract!))
         (.renameTo ^java.io.File (io/file folder-name) (io/file "zig-compiler"))))))
 
-(def default-zig-version "0.13.0")
-
-(defn extract-zig-from-resources! []
+(defn extract-zig-from-resources!
+  "extracts a copy of the zig compiler from a jar on the classpath whose name contains `zig-resource-name`."
+  []
   (-> zig-resource-name-with-extension
       (io/resource)
       (io/input-stream)
@@ -218,7 +226,7 @@
          (str "pub const zigclj__extern_var__" sym-name " = " typ ";")))))
 
 (defn post-process-header-translation
-  "Removes the duplicate 'struct_' type 'translate-c' creates for every struct in a header and adds explicit information about function parameters."
+  "Removes the duplicate 'struct_' types `translate-c` creates for every struct in a header and adds explicit information about function parameters."
   [zig-src]
   (-> zig-src
    (remove-duplicate-types)
@@ -264,7 +272,7 @@
    (translated-header-extern-functions zig-source)
    (translated-header-inline-functions zig-source)))
 
-(defn translated-header-declarations [zig-source]
+(defn- translated-header-declarations [zig-source]
   (let [zig-source-no-comments (s/replace zig-source #"//.*" "\n")]
     (concat
      (translated-header-definitions zig-source-no-comments)
